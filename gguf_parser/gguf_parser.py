@@ -1,0 +1,196 @@
+"""
+GGUF Parser
+
+This module provides a parser for GGUF files. It can be used as a library or
+as a standalone script. When used as a script, it takes a GGUF file as an
+argument and prints the parsed information.
+
+Usage:
+    python gguf_parser.py /path/to/file.gguf
+"""
+
+import argparse
+import struct
+
+
+class GGUFParseError(Exception):
+    """Exception raised for errors in the GGUF parsing process."""
+
+    pass
+
+
+class GGUFParser:
+    """A parser for GGUF files."""
+
+    GGUF_MAGIC_NUMBER = b"GGUF"
+    VALUE_FORMATS = {
+        0: "B",  # UINT8
+        1: "b",  # INT8
+        2: "H",  # UINT16
+        3: "h",  # INT16
+        4: "I",  # UINT32
+        5: "i",  # INT32
+        6: "f",  # FLOAT32
+        7: "?",  # BOOL
+        10: "Q",  # UINT64
+        11: "q",  # INT64
+        12: "d",  # FLOAT64
+    }
+    TENSOR_TYPES = {
+        0: "GGML_TYPE_F32",
+        1: "GGML_TYPE_F16",
+        2: "GGML_TYPE_Q4_0",
+        3: "GGML_TYPE_Q4_1",
+        6: "GGML_TYPE_Q5_0",
+        7: "GGML_TYPE_Q5_1",
+        8: "GGML_TYPE_Q8_0",
+        9: "GGML_TYPE_Q8_1",
+        10: "GGML_TYPE_Q2_K",
+        11: "GGML_TYPE_Q3_K",
+        12: "GGML_TYPE_Q4_K",
+        13: "GGML_TYPE_Q5_K",
+        14: "GGML_TYPE_Q6_K",
+        15: "GGML_TYPE_Q8_K",
+        16: "GGML_TYPE_IQ2_XXS",
+        17: "GGML_TYPE_IQ2_XS",
+        18: "GGML_TYPE_IQ3_XXS",
+        19: "GGML_TYPE_IQ1_S",
+        20: "GGML_TYPE_IQ4_NL",
+        21: "GGML_TYPE_IQ3_S",
+        22: "GGML_TYPE_IQ2_S",
+        23: "GGML_TYPE_IQ4_XS",
+        24: "GGML_TYPE_I8",
+        25: "GGML_TYPE_I16",
+        26: "GGML_TYPE_I32",
+        27: "GGML_TYPE_I64",
+        28: "GGML_TYPE_F64",
+        29: "GGML_TYPE_IQ1_M",
+    }
+
+    def __init__(self, file_path):
+        """Initialize the parser with the given GGUF file path."""
+        self.file_path = file_path
+        self.magic_number = None
+        self.version = None
+        self.tensors_info = None
+        self.metadata = None
+        self.alignment = None
+
+    def parse(self):
+        """Parse the GGUF file."""
+        with open(self.file_path, "rb") as f:
+            # Read the magic number
+            self.magic_number = f.read(4)
+            if self.magic_number != self.GGUF_MAGIC_NUMBER:
+                raise GGUFParseError("Invalid magic number")
+
+            # Read the version
+            self.version = struct.unpack("I", f.read(4))[0]
+            if self.version != 3:
+                raise GGUFParseError("Unsupported version")
+
+            # Read the number of tensors and metadata key-value pairs
+            tensor_count = struct.unpack("Q", f.read(8))[0]
+            metadata_kv_count = struct.unpack("Q", f.read(8))[0]
+
+            # Read the metadata key-value pairs
+            self.metadata = {}
+            for _ in range(metadata_kv_count):
+                key, value = self._read_metadata_kv(f)
+                self.metadata[key] = value
+
+            # Read the general.alignment metadata field
+            self.alignment = self.metadata.get("general.alignment", 1)
+
+            # Read the tensor information
+            self.tensors_info = []
+            for _ in range(tensor_count):
+                tensor_info = self._read_tensor_info(f)
+                self.tensors_info.append(tensor_info)
+
+    def _read_string(self, f):
+        """Read a string from the file."""
+        len = struct.unpack("Q", f.read(8))[0]
+        return f.read(len).decode("utf-8")
+
+    def _read_metadata_kv(self, f):
+        """Read a metadata key-value pair from the file."""
+        key = self._read_string(f)
+        value_type = struct.unpack("I", f.read(4))[0]
+        value = self._read_value(f, value_type)
+        return key, value
+
+    def _read_value(self, f, value_type):
+        """Read a value of the given type from the file."""
+        if value_type in self.VALUE_FORMATS:
+            return struct.unpack(
+                self.VALUE_FORMATS[value_type],
+                f.read(struct.calcsize(self.VALUE_FORMATS[value_type])),
+            )[0]
+        elif value_type == 8:  # STRING
+            return self._read_string(f)
+        elif value_type == 9:  # ARRAY
+            array_type = struct.unpack("I", f.read(4))[0]
+            array_len = struct.unpack("Q", f.read(8))[0]
+            return [self._read_value(f, array_type) for _ in range(array_len)]
+        else:
+            raise GGUFParseError("Unsupported value type")
+
+    def _read_tensor_info(self, f):
+        """Read tensor information from the file."""
+        name = self._read_string(f)
+        n_dimensions = struct.unpack("I", f.read(4))[0]
+        dimensions = struct.unpack(f"{n_dimensions}Q", f.read(8 * n_dimensions))
+        tensor_type = struct.unpack("I", f.read(4))[0]
+        offset = struct.unpack("Q", f.read(8))[0]
+        return {
+            "name": name,
+            "n_dimensions": n_dimensions,
+            "dimensions": dimensions,
+            "type": tensor_type,
+            "offset": offset,
+        }
+
+    def load_tensors(self):
+        """Load the tensors from the file."""
+        tensors = []
+        with open(self.file_path, "rb") as f:
+            for tensor_info in self.tensors_info:
+                f.seek(tensor_info["offset"])
+                tensor_data = f.read(tensor_info["n_dimensions"])
+                # Skip padding
+                if (f.tell() % self.alignment) != 0:
+                    f.read(self.alignment - (f.tell() % self.alignment))
+                # Construct the tensor here
+                tensors.append(tensor_data)
+        return tensors
+
+    def print(self):
+        print(f"Magic Number: {self.magic_number}")
+        print(f"Version: {self.version}")
+        print("Tensors Info:")
+        for tensor_info in self.tensors_info:
+            print(
+                f"  Name: {tensor_info['name']},\tShape: {tensor_info['dimensions']},"
+                f"\tType: {self.TENSOR_TYPES[tensor_info['type']]},\tOffset: {tensor_info['offset']}"
+            )
+        print("Metadata:")
+        for key, value in self.metadata.items():
+            if type(value) == list and len(value) > 50:
+                print(f"  {key}: {value[:50]}... ({len(value) - 50} more elements)")
+            else:
+                print(f"  {key}: {value}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Parse a GGUF file.")
+    parser.add_argument("file_path", help="The path to the GGUF file.")
+    args = parser.parse_args()
+
+    gguf_parser = GGUFParser(args.file_path)
+    try:
+        gguf_parser.parse()
+    except GGUFParseError as e:
+        print(f"Error: {e}")
+    else:
+        gguf_parser.print()
