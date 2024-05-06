@@ -6,6 +6,8 @@ setup(
     name="gguf-parser",
     version="0.1.0",
     description="A parser for GGUF files",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
     author="Hiromichi Goto",
     author_email="goto@suzuca.ai",
     url="https://github.com/hirox/gguf-parser",
