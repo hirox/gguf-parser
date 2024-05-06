@@ -4,12 +4,8 @@
 
 ## Installation
 
-To install `gguf-parser`, you can clone this repository and install it using `pip`:
-
 ```bash
-git clone https://github.com/hirox/gguf-parser.git
-cd gguf-parser
-pip install .
+pip install gguf-parser
 ```
 
 ## Usage
