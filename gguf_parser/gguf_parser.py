@@ -110,8 +110,8 @@ class GGUFParser:
 
     def _read_string(self, f):
         """Read a string from the file."""
-        len = struct.unpack("Q", f.read(8))[0]
-        return f.read(len).decode("utf-8")
+        length = struct.unpack("Q", f.read(8))[0]
+        return f.read(length).decode("utf-8")
 
     def _read_metadata_kv(self, f):
         """Read a metadata key-value pair from the file."""
@@ -127,14 +127,13 @@ class GGUFParser:
                 self.VALUE_FORMATS[value_type],
                 f.read(struct.calcsize(self.VALUE_FORMATS[value_type])),
             )[0]
-        elif value_type == 8:  # STRING
+        if value_type == 8:  # STRING
             return self._read_string(f)
-        elif value_type == 9:  # ARRAY
+        if value_type == 9:  # ARRAY
             array_type = struct.unpack("I", f.read(4))[0]
             array_len = struct.unpack("Q", f.read(8))[0]
             return [self._read_value(f, array_type) for _ in range(array_len)]
-        else:
-            raise GGUFParseError("Unsupported value type")
+        raise GGUFParseError("Unsupported value type")
 
     def _read_tensor_info(self, f):
         """Read tensor information from the file."""
@@ -166,6 +165,7 @@ class GGUFParser:
         return tensors
 
     def print(self):
+        """Print the parsed information."""
         print(f"Magic Number: {self.magic_number}")
         print(f"Version: {self.version}")
         print("Tensors Info:")
@@ -176,7 +176,7 @@ class GGUFParser:
             )
         print("Metadata:")
         for key, value in self.metadata.items():
-            if type(value) == list and len(value) > 50:
+            if isinstance(value, list) and len(value) > 50:
                 print(f"  {key}: {value[:50]}... ({len(value) - 50} more elements)")
             else:
                 print(f"  {key}: {value}")
