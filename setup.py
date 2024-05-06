@@ -1,3 +1,5 @@
+"""Setup script for gguf-parser."""
+
 from setuptools import setup, find_packages
 
 setup(
