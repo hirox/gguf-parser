@@ -1,22 +1,14 @@
 """
 GGUF Parser
 
-This module provides a parser for GGUF files. It can be used as a library or
-as a standalone script. When used as a script, it takes a GGUF file as an
-argument and prints the parsed information.
-
-Usage:
-    python gguf_parser.py /path/to/file.gguf
+This module provides a parser for GGUF files.
 """
 
-import argparse
 import struct
 
 
 class GGUFParseError(Exception):
     """Exception raised for errors in the GGUF parsing process."""
-
-    pass
 
 
 class GGUFParser:
@@ -172,7 +164,8 @@ class GGUFParser:
         for tensor_info in self.tensors_info:
             print(
                 f"  Name: {tensor_info['name']},\tShape: {tensor_info['dimensions']},"
-                f"\tType: {self.TENSOR_TYPES[tensor_info['type']]},\tOffset: {tensor_info['offset']}"
+                f"\tType: {self.TENSOR_TYPES[tensor_info['type']]},"
+                f"\tOffset: {tensor_info['offset']}"
             )
         print("Metadata:")
         for key, value in self.metadata.items():
@@ -180,17 +173,3 @@ class GGUFParser:
                 print(f"  {key}: {value[:50]}... ({len(value) - 50} more elements)")
             else:
                 print(f"  {key}: {value}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Parse a GGUF file.")
-    parser.add_argument("file_path", help="The path to the GGUF file.")
-    args = parser.parse_args()
-
-    gguf_parser = GGUFParser(args.file_path)
-    try:
-        gguf_parser.parse()
-    except GGUFParseError as e:
-        print(f"Error: {e}")
-    else:
-        gguf_parser.print()
